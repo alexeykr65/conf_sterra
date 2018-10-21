@@ -103,7 +103,9 @@ def get_list_hosts_from_file(name_config_file):
 def get_hostname(password_ssh, ip_host_ssh):
     run_hostname_command = ['hostname']
     hostname = ""
+    tmp_buff = ""
     tmp_buff = run_command(run_hostname_command, password_ssh, ip_host_ssh)
+    log_message(2, "tmp_buff for ip : " + ip_host_ssh + "  include: " + tmp_buff)
     for line_hostname in tmp_buff.split("\n"):
         # or (not re.search('#', line_hostname))
         if not re.search("hostname|#|!=", line_hostname):
@@ -142,14 +144,14 @@ def run_command(run_commands, password_ssh, ip_host_ssh):
                 log_buff += resp_ssh
             log_message(1, "Command \'" + str_command + "\' run OK")
         log_buff += "\n!===============================================================\n"
-        cleanBuff(log_buff)
-        id_conn_paramiko.close()
+        # log_buff = cleanBuff(log_buff)
 
     except paramiko.AuthenticationException:
         print("Authentication problem with host ip: " + ip_host_ssh + " ... access denied")
         if __number_passwords_ssh__ > 1:
             print("Connecting with another password ...")
             __number_passwords_ssh__ -= 1
+            id_conn_paramiko.close()
             log_buff = run_command(run_commands, __list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
@@ -157,9 +159,10 @@ def run_command(run_commands, password_ssh, ip_host_ssh):
     except socket.error as e:
         print("Socket error with host ip: " + ip_host_ssh + " : ", e)
     else:
-        pass
-    finally:
+        log_message(0, "Connected ... OK")
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
+    finally:
+        id_conn_paramiko.close()
         return log_buff
 
 
@@ -186,8 +189,9 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
     null_terminal_length_command = "terminal length 0"
     get_config_command = "show run"
     log_buff = ""
+    log_message(2, "Module get_show_run_cs_console ..")
     try:
-        # log_message(0, "RND host: " + h[0] + " " + h[1])
+        log_message(0, "Try to connect host: " + ip_host_ssh)
         id_conn_paramiko = paramiko.SSHClient()
         id_conn_paramiko.load_system_host_keys()
         id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
@@ -196,6 +200,7 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
         chan = id_conn_paramiko.invoke_shell()
 
         resp_ssh = ""
+        log_message(0, "Connected to host : " + ip_host_ssh)
         while not re.search("#", resp_ssh):
             while not chan.recv_ready():
                 time.sleep(0.05)
@@ -209,29 +214,49 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
             while not chan.recv_ready():
                 time.sleep(0.05)
             resp_ssh = chan.recv(9999).decode('ascii')
+            if re.search("Could not establish", resp_ssh):
+                log_message(0, "ERROR: Could not establish connection with daemon on host: "  + ip_host_ssh)
+                log_message(0, "Return without cisco configuration ...  ")
+                return log_buff
             log_message(2, resp_ssh)
         log_message(1, "Command \'" + csconsole_command + "\'run OK")
 
         chan.send(enable_command + "\n")
         resp_ssh = ""
+        log_message(1, "Running command \'" + enable_command + "\' ...")
         while not re.search("assword", resp_ssh):
             while not chan.recv_ready():
                 time.sleep(0.05)
             resp_ssh = chan.recv(9999).decode('ascii')
-            log_message(2, resp_ssh)
+            log_message(1, resp_ssh)
+        num_list_password = len(__list_passwords_enable__)
+        log_message(1, "Num enable password: " + str(num_list_password))
         for enable_password in __list_passwords_enable__:
+            log_message(1, "Current num enable password: " + str(num_list_password))
+            log_message(1, "Enable pass: " + enable_password)
             chan.send(enable_password + "\n")
-        resp_ssh = ""
-        while not re.search("#", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            if re.search("denied", resp_ssh):
-                log_message(0, "Enable password is incorect for host: " + ip_host_ssh)
-                return log_buff
-            log_message(2, resp_ssh)
-        log_message(1, "Command \'" + enable_command + "\'run OK")
+            resp_ssh = ""
+            while not re.search("#", resp_ssh):
+                while not chan.recv_ready():
+                    time.sleep(0.05)
+                resp_ssh = chan.recv(9999).decode('ascii')
+                log_message(2, resp_ssh)
+                if re.search("denied", resp_ssh):
+                    log_message(1, "Enable password is incorect for host: " + ip_host_ssh)                    
+                    num_list_password -= 1
+                    if num_list_password == 0:
+                        log_message(1, "Return without enable ")
+                        __number_passwords_ssh__ = len(__list_passwords_ssh__)
+                        id_conn_paramiko.close()
+                        return ""
+                    else:
+                        log_message(1, "Break if")
+                        chan.send(enable_command + "\n")
+                        break
+                log_message(2, resp_ssh)
+        log_message(1, "Command \'" + enable_command + "\' run OK")
 
+        log_message(1, "Run null terminal length")
         chan.send(null_terminal_length_command + "\n")
         resp_ssh = ""
         while not re.search("#", resp_ssh):
@@ -239,7 +264,7 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
                 time.sleep(0.05)
             resp_ssh = chan.recv(9999).decode('ascii')
             log_message(2, resp_ssh)
-        log_message(1, "Command \'" + null_terminal_length_command + "\'run OK")
+        log_message(1, "Command \'" + null_terminal_length_command + "\' run OK")
 
         chan.send(get_config_command + "\n")
         resp_ssh = ""
@@ -249,23 +274,26 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
             resp_ssh = chan.recv(9999).decode('ascii')
             log_buff += resp_ssh
             log_message(2, resp_ssh)
-        log_message(1, "Command \'" + get_config_command + "\'run OK")
+        log_message(1, "Command \'" + get_config_command + "\' run OK")
         log_message(2, log_buff)
-        id_conn_paramiko.close()
+
     except paramiko.AuthenticationException:
         print("Authentication problem ...")
         if __number_passwords_ssh__ > 1:
             print("Connecting with another password ...")
             __number_passwords_ssh__ -= 1
-            get_show_run_cs_console(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
+            log_buff = get_show_run_cs_console(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
         print("Could not establish SSH connection: %s" % sshException)
+        __number_passwords_ssh__ = len(__list_passwords_ssh__)
     except socket.error as e:
         print("Socket error: ", e)
     else:
-        pass
+        log_message(0, "Connected ... OK")
+        __number_passwords_ssh__ = len(__list_passwords_ssh__)
     finally:
+        id_conn_paramiko.close()
         return log_buff
 
 
@@ -324,9 +352,11 @@ def rnd_run_command(password_ssh, ip_host_ssh):
     except socket.error as e:
         print("Socket error: ", e)
     else:
-        pass
-    finally:
+        log_message(0, "Connected ... OK")
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
+    finally:
+        id_conn_paramiko.close()
+        return log_buff
 
 
 if __name__ == '__main__':
@@ -359,6 +389,7 @@ if __name__ == '__main__':
     log_message(2, "Count pass: " + str(__number_passwords_ssh__))
     if arg.get_enable_password:
         __list_passwords_enable__[0] = getpass.getpass("Enable Password :")
+        __list_passwords_enable__.append("csp")
 
     # Run commands
     if arg.command_run:
@@ -374,12 +405,13 @@ if __name__ == '__main__':
     # Run commands for get all configs s-terra
     if arg.get_all:
         for h in __list_hosts_ssh__:
+            log_message(0, "!-----------------------------------------------------------------------")
             hostname = get_hostname(__list_passwords_ssh__[0], h[0]).strip()
             ret_log_buff = run_command(__all_config_list_command__, __list_passwords_ssh__[0], h[0])
             log_message(2, "!----------------------" + h[0] + "(" + hostname + ")----------------------")
             log_message(2, ret_log_buff)
-            write_to_file_result("config", hostname, h[0], ret_log_buff)
-            #print("hostname: " + hostname)
+            if ret_log_buff:
+                write_to_file_result("config", hostname, h[0], ret_log_buff)
 
     # Run Initialization s-terra
     if arg.init:
@@ -387,12 +419,13 @@ if __name__ == '__main__':
             log_message(0, "!----------------------" + h[0] + "(" + h[1] + ")----------------------")
             rnd_run_command(__list_passwords_ssh__[0], h[0])
             set_license_sterra(h)
-
+    # Get cisco like console from s-terra
     if arg.get_config_cisco:
         for h in __list_hosts_ssh__:
+            log_message(0, "!-----------------------------------------------------------------------")
             hostname = get_hostname(__list_passwords_ssh__[0], h[0]).strip()
+            log_message(1, "Host to connect : " + hostname + "---" + h[0])
             ret_log_buff = get_show_run_cs_console(__list_passwords_ssh__[0], h[0])
-            log_message(2, "!----------------------" + h[0] + "(" + hostname + ")----------------------")
             log_message(2, ret_log_buff)
             if ret_log_buff:
                 write_to_file_result("csconsole", hostname, h[0], ret_log_buff)
