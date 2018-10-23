@@ -24,10 +24,13 @@ __timeout_ssh__ = 2
 __list_passwords_ssh__ = []
 __list_passwords_enable__ = ['csp']
 __number_passwords_ssh__ = 2
+__flag_print_onscreen__ = False
+
 __list_hosts_ssh__ = []
+__dict_hosts_ssh__ = []
 __username_ssh__ = "root"
 __output_dir__ = ""
-
+__name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code', 'ip_host', 'ip_mask', 'ip_default']
 __all_config_list_command__ = [
     'lic_mgr show',
     'cat /opt/l2svc/etc/*.lic',
@@ -77,6 +80,27 @@ mtu 1500
 """
 
 
+def check_argument_parser():
+    log_message(2, "Analyze options ... ")
+    parser = argparse.ArgumentParser(description=description_argument_parser, epilog=epilog_argument_parser)
+    parser.add_argument('-f', '--file', help='File name input', dest="file_name", default='')
+    parser.add_argument('-c', '--command', help='Run commands', dest="command_run", default='')
+    parser.add_argument('-i', '--init', help='Initialyze S-Terra', dest="init", action="store_true")
+    parser.add_argument('-ga', '--getall', help='Get All Configs from S-Terra', dest="get_all", action="store_true")
+    parser.add_argument('-gc', '--getcisco', help='Get cisco config', dest="get_config_cisco", action="store_true")
+    parser.add_argument('-hi', '--hostip', help='IP address of Hosts', dest="host_ip", default='')
+    parser.add_argument('-tm', '--sshtimeout', help='SSH timeout in sec', dest="ssh_timeout", default=2)
+    parser.add_argument('-ps', '--passwords', help='Set passwords', dest="passwords", default='')
+    parser.add_argument('-pe', '--passenable', help='Set enable password', dest="get_enable_password", action="store_true")
+    parser.add_argument('-pn', '--numpass', help='Number passwords', dest="number_pass", default='')
+    parser.add_argument('-od', '--outdir', help='Output dir for writing files', dest="output_dir", default='./output/')
+    parser.add_argument('-t', '--testing', help='For testing other features', dest="testing", action="store_true")
+    parser.add_argument('-p', '--print', help='Output on screen ', dest="print_onscreen", action="store_true")
+    parser.add_argument('-d', '--debug', help='Debug information view(1 - standart, 2 - more verbose)', dest="debug", default=0)
+
+    return parser.parse_args()
+
+
 def log_message(level_debug, message_log):
     # global __flag_debug__
     if __level_debug__ >= level_debug:
@@ -108,36 +132,35 @@ def write_to_file_result(pre_name_file, namehost, iphost, write_messsage):
     file_name = '-'.join(list_names)
     id_config_file = open(__output_dir__ + file_name, 'w')
     id_config_file.write(write_messsage)
+    if __flag_print_onscreen__:
+        print(write_messsage)
     id_config_file.write("\n\n")
     id_config_file.close()
-
-
-def check_argument_parser():
-    log_message(2, "Analyze options ... ")
-    parser = argparse.ArgumentParser(description=description_argument_parser, epilog=epilog_argument_parser)
-    parser.add_argument('-f', '--file', help='File name input', dest="file_name", default='')
-    parser.add_argument('-c', '--command', help='Run commands', dest="command_run", default='')
-    parser.add_argument('-i', '--init', help='Initialyze S-Terra', dest="init", action="store_true")
-    parser.add_argument('-ga', '--getall', help='Get All Configs from S-Terra', dest="get_all", action="store_true")
-    parser.add_argument('-gc', '--getcisco', help='Get cisco config', dest="get_config_cisco", action="store_true")
-    parser.add_argument('-hi', '--hostip', help='IP address of Hosts', dest="host_ip", default='')
-    parser.add_argument('-tm', '--sshtimeout', help='SSH timeout in sec', dest="ssh_timeout", default=2)
-    parser.add_argument('-ps', '--passwords', help='Set passwords', dest="passwords", default='')
-    parser.add_argument('-pe', '--passenable', help='Set enable password', dest="get_enable_password", action="store_true")
-    parser.add_argument('-pn', '--numpass', help='Number passwords', dest="number_pass", default='')
-    parser.add_argument('-od', '--outdir', help='Output dir for writing files', dest="output_dir", default='./output/')
-    parser.add_argument('-d', '--debug', help='Debug information view(1 - standart, 2 - more verbose)', dest="debug", default=0)
-
-    return parser.parse_args()
 
 
 def get_list_hosts_from_file(name_config_file):
     global __list_hosts_ssh__
     id_config_file = open(name_config_file, 'r')
     for line_config_file in id_config_file:
-        log_message(2, line_config_file)
         if line_config_file.strip() != '' and not re.search("!", line_config_file):
             __list_hosts_ssh__.append(list(line_config_file.strip().split(';')))
+    id_config_file.close()
+    log_message(2, __list_hosts_ssh__)
+
+
+def get_dict_hosts_from_file(name_config_file):
+    global __dict_hosts_ssh__
+    id_config_file = open(name_config_file, 'r')
+    for line_config_file in id_config_file:
+        data = dict()
+        line_list = list()
+        if line_config_file.strip() != '' and not re.search("!", line_config_file):
+            line_list = line_config_file.strip().split(';')
+            for i in range(0, len(line_list)):
+                data[__name_list_dict__[i]] = line_list[i]
+            __dict_hosts_ssh__.append(data)
+
+    log_message(2, __dict_hosts_ssh__)
     id_config_file.close()
 
 
@@ -145,7 +168,7 @@ def get_hostname(password_ssh, ip_host_ssh):
     run_hostname_command = ['hostname']
     hostname = ""
     tmp_buff = ""
-    tmp_buff = run_command(run_hostname_command, password_ssh, ip_host_ssh)
+    tmp_buff = cmd_run_command(run_hostname_command, password_ssh, ip_host_ssh)
     log_message(2, "tmp_buff for ip : " + ip_host_ssh + "  include: " + tmp_buff)
     for line_hostname in tmp_buff.split("\n"):
         # or (not re.search('#', line_hostname))
@@ -156,7 +179,7 @@ def get_hostname(password_ssh, ip_host_ssh):
     return hostname
 
 
-def run_command(run_commands, password_ssh, ip_host_ssh):
+def cmd_run_command(run_commands, password_ssh, ip_host_ssh):
     global __number_passwords_ssh__
     log_buff = ""
     try:
@@ -192,7 +215,7 @@ def run_command(run_commands, password_ssh, ip_host_ssh):
             print("Connecting with another password ...")
             __number_passwords_ssh__ -= 1
             id_conn_paramiko.close()
-            log_buff = run_command(run_commands, __list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
+            log_buff = cmd_run_command(run_commands, __list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
         print("Could not establish SSH connection with host ip: " + ip_host_ssh + " : %s" % sshException)
@@ -216,13 +239,13 @@ def cleanBuff(tmp_buff):
 
 
 def set_license_sterra(info_host_ssh):
-    global __list_hosts_ssh__, __list_passwords_ssh__
-    lic_command = "lic_mgr set -p " + info_host_ssh[2] + " -c " + info_host_ssh[3] + " -n " + info_host_ssh[4] + " -l " + info_host_ssh[5]
+    global __list_hosts_ssh__, __list_passwords_ssh__, __dict_hosts_ssh__
+    lic_command = ' lic_mgr set -p {ip:s} -c {customer:s} -n  {lic_num:s}  -l {lic_code:s}'.format_map(info_host_ssh)
     log_message(1, lic_command)
-    run_command(list(lic_command.split(',')), __list_passwords_ssh__[0], info_host_ssh[0])
+    cmd_run_command(list(lic_command.split(',')), __list_passwords_ssh__[0], info_host_ssh['ip'])
 
 
-def get_show_run_cs_console(password_ssh, ip_host_ssh):
+def show_run_csconsole_run_command(password_ssh, ip_host_ssh):
     global __number_passwords_ssh__
     csconsole_command = "/usr/bin/cs_console"
     enable_command = "enable"
@@ -322,7 +345,7 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
         if __number_passwords_ssh__ > 1:
             print("Connecting with another password ...")
             __number_passwords_ssh__ -= 1
-            log_buff = get_show_run_cs_console(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
+            log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
         print("Could not establish SSH connection: %s" % sshException)
@@ -337,7 +360,7 @@ def get_show_run_cs_console(password_ssh, ip_host_ssh):
         return log_buff
 
 
-def run_csconsole_command(run_commands, password_ssh, ip_host_ssh):
+def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
     global __number_passwords_ssh__
     csconsole_command = "/usr/bin/cs_console"
     enable_command = "enable"
@@ -437,7 +460,7 @@ def run_csconsole_command(run_commands, password_ssh, ip_host_ssh):
         if __number_passwords_ssh__ > 1:
             print("Connecting with another password ...")
             __number_passwords_ssh__ -= 1
-            log_buff = get_show_run_cs_console(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
+            log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
         print("Could not establish SSH connection: %s" % sshException)
@@ -528,9 +551,12 @@ if __name__ == '__main__':
     __level_debug__ = int(arg.debug)
     __timeout_ssh__ = int(arg.ssh_timeout)
     __output_dir__ = arg.output_dir
+    if arg.print_onscreen:
+        __flag_print_onscreen__ = True
     # Filename with hostnames and other information
     if arg.file_name:
         get_list_hosts_from_file(arg.file_name)
+        get_dict_hosts_from_file(arg.file_name)
     if arg.host_ip:
         for group_list in arg.host_ip.split(','):
             __list_hosts_ssh__.append(group_list.split(':'))
@@ -556,24 +582,26 @@ if __name__ == '__main__':
     if arg.command_run:
         for c in arg.command_run.split(','):
             listComm.append(c.strip())
-        for h in __list_hosts_ssh__:
-            log_message(0, "!-----------------------------------------------------------------------")
-            hostname = get_hostname(__list_passwords_ssh__[0], h[0]).strip()
-            ret_log_buff = run_command(listComm, __list_passwords_ssh__[0], h[0])
-            log_message(2, "!----------------------" + h[0] + "(" + h[1] + ")----------------------")
+        for h in __dict_hosts_ssh__:
+            log_message(0, "!=======================================================================")
+            log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
+            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            ret_log_buff = cmd_run_command(listComm, __list_passwords_ssh__[0], h['ip'])
+            log_message(2, "!----------------------" + h['ip'] + "(" + h['host'] + ")----------------------")
             log_message(2, ret_log_buff)
             if ret_log_buff:
-                write_to_file_result("command", hostname, h[0], ret_log_buff)
+                write_to_file_result("command", hostname, h['ip'], ret_log_buff)
     # Run commands for get all configs s-terra
     if arg.get_all:
-        for h in __list_hosts_ssh__:
-            log_message(0, "!-----------------------------------------------------------------------")
-            hostname = get_hostname(__list_passwords_ssh__[0], h[0]).strip()
-            ret_log_buff = run_command(__all_config_list_command__, __list_passwords_ssh__[0], h[0])
-            log_message(2, "!----------------------" + h[0] + "(" + hostname + ")----------------------")
+        for h in __dict_hosts_ssh__:
+            log_message(0, "!=======================================================================")
+            log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
+            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            ret_log_buff = cmd_run_command(__all_config_list_command__, __list_passwords_ssh__[0], h['ip'])
+            log_message(2, "!----------------------" + h['ip'] + "(" + hostname + ")----------------------")
             log_message(2, ret_log_buff)
             if ret_log_buff:
-                write_to_file_result("config", hostname, h[0], ret_log_buff)
+                write_to_file_result("config", hostname, h['ip'], ret_log_buff)
     # Run Initialization s-terra
     if arg.init:
         __init_commands__.append('\n'.join(__ifaliases_file_))
@@ -586,43 +614,51 @@ if __name__ == '__main__':
         __init_commands__.append('')
 
         log_message(2, __init_commands__)
-        for h in __list_hosts_ssh__:
+        for h in __dict_hosts_ssh__:
             if (len(h) - 1) >= 6:
+                print("length dict: " + str(len(h)))
                 __init_commands__[len(__init_commands__) - 1] = __init_config_network_interfaces__
-                __init_commands__[len(__init_commands__) - 1] += "address " + h[6] + "\nnetmask " + h[7] + "\nbroadcast " + h[8] + "\n###netifcfg-end###\nEOF\n"
-                # __init_commands__.append('cat /etc/network/interfaces')
-            # print(__init_commands__[len(__init_commands__) - 1])
+                __init_commands__[len(__init_commands__) - 1] += 'address {ip_host:s}\nnetmask {ip_mask:s}\n###netifcfg-end###\nEOF\n'.format_map(h)
+
+            # print(__init_commands__)
             ret_log_buff = ""
             tmp_ret_log_buff = ""
             log_message(0, "!=======================================================================")
-            log_message(0, "+++++++++++++++++++ " + h[0] + "(" + h[1] + ") +++++++++++++++++++")
+            log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
             log_message(0, "+++++++++++++++++++ Run initializing RND +++++++++++++++++++  ")
-            ret_log_buff = rnd_run_command(__list_passwords_ssh__[0], h[0])
+            ret_log_buff = rnd_run_command(__list_passwords_ssh__[0], h['ip'])
             tmp_ret_log_buff += ret_log_buff
             log_message(0, ret_log_buff)
             log_message(0, "+++++++++++++++++++ Set license +++++++++++++++++++ ")
             set_license_sterra(h)
-            ret_log_buff = run_command(__init_commands__, __list_passwords_ssh__[0], h[0])
+            ret_log_buff = cmd_run_command(__init_commands__, __list_passwords_ssh__[0], h['ip'])
             tmp_ret_log_buff += ret_log_buff
             log_message(0, ret_log_buff)
             time.sleep(2)
-            ip_route_command = "ip route 0.0.0.0 0.0.0.0 " + h[9]
-            ret_log_buff = run_csconsole_command(['conf t', ip_route_command, 'end', 'exit'], __list_passwords_ssh__[0], h[0])
+            ip_route_command = 'ip route 0.0.0.0 0.0.0.0  {ip_default:s}'.format_map(h)
+            ret_log_buff = csconsole_run_command(['conf t', ip_route_command, 'end', 'exit'], __list_passwords_ssh__[0], h['ip'])
             tmp_ret_log_buff += ret_log_buff
             log_message(0, ret_log_buff)
             if ret_log_buff:
-                write_to_file_result("initialize", h[1], h[0], tmp_ret_log_buff)
+                write_to_file_result("initialize", h['host'], h['ip'], tmp_ret_log_buff)
 
     # Get cisco like console from s-terra
     if arg.get_config_cisco:
-        for h in __list_hosts_ssh__:
+        for h in __dict_hosts_ssh__:
             log_message(0, "!-----------------------------------------------------------------------")
-            hostname = get_hostname(__list_passwords_ssh__[0], h[0]).strip()
-            log_message(1, "Host to connect : " + hostname + "---" + h[0])
-            ret_log_buff = get_show_run_cs_console(__list_passwords_ssh__[0], h[0])
+            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            log_message(1, "Host to connect : " + hostname + "---" + h['ip'])
+            ret_log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[0], h['ip'])
             log_message(2, ret_log_buff)
             if ret_log_buff:
-                write_to_file_result("csconsole", hostname, h[0], ret_log_buff)
+                write_to_file_result("csconsole", hostname, h['ip'], ret_log_buff)
+
+    if arg.testing:
+        get_dict_hosts_from_file(arg.file_name)
+        print(__list_hosts_ssh__)
+        for x in __list_hosts_ssh__:
+            print(' lic_mgr set -p {ip:s} -c {customer:s} -n  {lic_num:s}  -l {lic_code:s}'.format_map(x))
+        getpass.getpass()
 
     log_message(0, "Script complete successful!!! ")
     sys.exit()
