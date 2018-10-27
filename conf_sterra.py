@@ -15,7 +15,7 @@ import sys
 import socket
 import getpass
 
-description_argument_parser = "S-Terra: Configure S-Terra, v1.0"
+description_argument_parser = "S-Terra: Configure S-Terra, v2.0"
 epilog_argument_parser = "Alexey: alexeykr@gmail.ru"
 
 __level_debug__ = int()
@@ -25,12 +25,13 @@ __list_passwords_ssh__ = []
 __list_passwords_enable__ = ['csp']
 __number_passwords_ssh__ = 2
 __flag_print_onscreen__ = False
+__log_output_file__ = "log_output"
 
 __list_hosts_ssh__ = []
 __dict_hosts_ssh__ = []
 __username_ssh__ = "root"
 __output_dir__ = ""
-__name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code', 'ip_host', 'ip_mask', 'ip_default']
+__name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code', 'ip_host', 'ip_mask', 'ip_default', 'eth']
 __all_config_list_command__ = [
     'lic_mgr show',
     'cat /opt/l2svc/etc/*.lic',
@@ -73,11 +74,10 @@ auto lo
 iface lo inet loopback
 
 ###netifcfg-begin###
-auto eth0
-iface eth0 inet static
-mtu 1500
 
 """
+
+
 
 
 def check_argument_parser():
@@ -105,6 +105,10 @@ def log_message(level_debug, message_log):
     # global __flag_debug__
     if __level_debug__ >= level_debug:
         print(message_log)
+        id_config_file = open(__output_dir__ + __log_output_file__, 'a+')
+        id_config_file.write(message_log)
+        id_config_file.write("\n")
+        id_config_file.close()
 
 
 def get_date():
@@ -126,13 +130,15 @@ def get_date():
     return year, month, day, hour, minute
 
 
-def write_to_file_result(pre_name_file, namehost, iphost, write_messsage):
+def write_to_file_result(pre_name_file, namehost, iphost, write_messsage, flagNewFile=True):
     year, month, day, hour, minute = get_date()
+
     list_names = [pre_name_file, namehost, iphost, day, month, year, hour, minute + ".txt"]
     file_name = '-'.join(list_names)
     id_config_file = open(__output_dir__ + file_name, 'w')
     id_config_file.write(write_messsage)
     if __flag_print_onscreen__:
+        # print("\n!--------------------------Output-----------------------------\n")
         print(write_messsage)
     id_config_file.write("\n\n")
     id_config_file.close()
@@ -140,7 +146,7 @@ def write_to_file_result(pre_name_file, namehost, iphost, write_messsage):
 
 def get_list_hosts_from_file(name_config_file):
     global __list_hosts_ssh__
-    id_config_file = open(name_config_file, 'r')
+    id_config_file = open(name_config_file, 'r', encoding="utf-8")
     for line_config_file in id_config_file:
         if line_config_file.strip() != '' and not re.search("!", line_config_file):
             __list_hosts_ssh__.append(list(line_config_file.strip().split(';')))
@@ -150,7 +156,7 @@ def get_list_hosts_from_file(name_config_file):
 
 def get_dict_hosts_from_file(name_config_file):
     global __dict_hosts_ssh__
-    id_config_file = open(name_config_file, 'r')
+    id_config_file = open(name_config_file, 'r', encoding="utf-8")
     for line_config_file in id_config_file:
         data = dict()
         line_list = list()
@@ -158,6 +164,8 @@ def get_dict_hosts_from_file(name_config_file):
             line_list = line_config_file.strip().split(';')
             for i in range(0, len(line_list)):
                 data[__name_list_dict__[i]] = line_list[i]
+            if __name_list_dict__[1] not in data:
+                data[__name_list_dict__[1]] = ""
             __dict_hosts_ssh__.append(data)
 
     log_message(2, __dict_hosts_ssh__)
@@ -172,7 +180,7 @@ def get_hostname(password_ssh, ip_host_ssh):
     log_message(2, "tmp_buff for ip : " + ip_host_ssh + "  include: " + tmp_buff)
     for line_hostname in tmp_buff.split("\n"):
         # or (not re.search('#', line_hostname))
-        if not re.search("hostname|#|!=", line_hostname):
+        if not re.search("hostname|#|!-", line_hostname):
             if line_hostname.strip():
                 hostname += line_hostname
                 # print("line_hostname: " + line_hostname)
@@ -197,7 +205,7 @@ def cmd_run_command(run_commands, password_ssh, ip_host_ssh):
         log_message(1, "Received command promt \'#\': OK")
         for str_command in run_commands:
             resp_ssh = ""
-            log_buff += "\n!===============================================================\n"
+            log_buff += "\n!-----------------------------------------------------------\n"
             chan.send(str_command + "\n")
             while not re.search("#", resp_ssh):
                 while not chan.recv_ready():
@@ -206,7 +214,7 @@ def cmd_run_command(run_commands, password_ssh, ip_host_ssh):
                 log_message(2, "====" + resp_ssh + "=====")
                 log_buff += resp_ssh
             log_message(1, "Command \'" + str_command + "\' run OK")
-        log_buff += "\n!===============================================================\n"
+        log_buff += "\n!-----------------------------------------------------------\n"
         # log_buff = cleanBuff(log_buff)
 
     except paramiko.AuthenticationException:
@@ -240,9 +248,11 @@ def cleanBuff(tmp_buff):
 
 def set_license_sterra(info_host_ssh):
     global __list_hosts_ssh__, __list_passwords_ssh__, __dict_hosts_ssh__
-    lic_command = ' lic_mgr set -p {ip:s} -c {customer:s} -n  {lic_num:s}  -l {lic_code:s}'.format_map(info_host_ssh)
-    log_message(1, lic_command)
-    cmd_run_command(list(lic_command.split(',')), __list_passwords_ssh__[0], info_host_ssh['ip'])
+    lic_command = ' lic_mgr set -p {product:s} -c {customer:s} -n  {lic_num:s}  -l {lic_code:s}'.format_map(info_host_ssh)
+    log_message(0, lic_command)
+    log_buff = cmd_run_command(list(lic_command.split(',')), __list_passwords_ssh__[0], info_host_ssh['ip'])
+    if re.search("Wrong", log_buff):
+        log_message(0, "Wrong license !!!!!")
 
 
 def show_run_csconsole_run_command(password_ssh, ip_host_ssh):
@@ -540,6 +550,10 @@ def rnd_run_command(password_ssh, ip_host_ssh):
 
 if __name__ == '__main__':
     listComm = list()
+    year, month, day, hour, minute = get_date()
+    list_names = ["log_output", day, month, year, hour, minute + ".txt"]
+    __log_output_file__ = '-'.join(list_names)
+
     # Disable warning from python
     if not sys.warnoptions:
         import warnings
@@ -558,9 +572,12 @@ if __name__ == '__main__':
         get_list_hosts_from_file(arg.file_name)
         get_dict_hosts_from_file(arg.file_name)
     if arg.host_ip:
-        for group_list in arg.host_ip.split(','):
-            __list_hosts_ssh__.append(group_list.split(':'))
-        log_message(2, __list_hosts_ssh__)
+        for ip_host in arg.host_ip.split(','):
+            data = dict()
+            data['ip'] = ip_host.strip()
+            data['host'] = ""
+            __dict_hosts_ssh__.append(data)
+        log_message(2, __dict_hosts_ssh__)
 
     # Set passwords for ssh
     if arg.number_pass:
@@ -597,6 +614,7 @@ if __name__ == '__main__':
             log_message(0, "!=======================================================================")
             log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
             hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            # print("Hostname : " + hostname + "===")
             ret_log_buff = cmd_run_command(__all_config_list_command__, __list_passwords_ssh__[0], h['ip'])
             log_message(2, "!----------------------" + h['ip'] + "(" + hostname + ")----------------------")
             log_message(2, ret_log_buff)
@@ -618,6 +636,7 @@ if __name__ == '__main__':
             if (len(h) - 1) >= 6:
                 print("length dict: " + str(len(h)))
                 __init_commands__[len(__init_commands__) - 1] = __init_config_network_interfaces__
+                __init_commands__[len(__init_commands__) - 1] += 'auto {eth:s} \niface {eth:s} inet static\nmtu 1500\n'.format_map(h)
                 __init_commands__[len(__init_commands__) - 1] += 'address {ip_host:s}\nnetmask {ip_mask:s}\n###netifcfg-end###\nEOF\n'.format_map(h)
 
             # print(__init_commands__)
@@ -645,7 +664,8 @@ if __name__ == '__main__':
     # Get cisco like console from s-terra
     if arg.get_config_cisco:
         for h in __dict_hosts_ssh__:
-            log_message(0, "!-----------------------------------------------------------------------")
+            log_message(0, "!=======================================================================")
+            log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
             hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
             log_message(1, "Host to connect : " + hostname + "---" + h['ip'])
             ret_log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[0], h['ip'])
