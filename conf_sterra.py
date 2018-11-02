@@ -20,7 +20,7 @@ epilog_argument_parser = "Alexey: alexeykr@gmail.ru"
 
 __level_debug__ = int()
 
-__timeout_ssh__ = 2
+__timeout_ssh__ = 5
 __list_passwords_ssh__ = []
 __list_passwords_enable__ = ['csp']
 __number_passwords_ssh__ = 2
@@ -35,6 +35,7 @@ __name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code'
 __all_config_list_command__ = [
     'lic_mgr show',
     'cat /opt/l2svc/etc/*.lic',
+    'find /opt/l2svc/etc/ -iname "*.conf" -exec echo {} \; -exec cat {} \;',
     'cat /etc/ifaliases.cf',
     'cat /etc/network/interfaces'
 ]
@@ -76,8 +77,6 @@ iface lo inet loopback
 ###netifcfg-begin###
 
 """
-
-
 
 
 def check_argument_parser():
@@ -218,17 +217,17 @@ def cmd_run_command(run_commands, password_ssh, ip_host_ssh):
         # log_buff = cleanBuff(log_buff)
 
     except paramiko.AuthenticationException:
-        print("Authentication problem with host ip: " + ip_host_ssh + " ... access denied")
+        log_message(0, "Authentication problem with host ip: " + ip_host_ssh + " ... access denied")
         if __number_passwords_ssh__ > 1:
-            print("Connecting with another password ...")
+            log_message(0, "Connecting with another password ...")
             __number_passwords_ssh__ -= 1
             id_conn_paramiko.close()
             log_buff = cmd_run_command(run_commands, __list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
-        print("Could not establish SSH connection with host ip: " + ip_host_ssh + " : %s" % sshException)
+        log_message(0, "Could not establish SSH connection with host ip: " + ip_host_ssh + " : " + str(sshException))
     except socket.error as e:
-        print("Socket error with host ip: " + ip_host_ssh + " : ", e)
+        log_message(0, "Socket error with host ip: " + ip_host_ssh + " : " + str(e))
     else:
         log_message(0, "Connected ... OK")
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
@@ -255,130 +254,15 @@ def set_license_sterra(info_host_ssh):
         log_message(0, "Wrong license !!!!!")
 
 
-def show_run_csconsole_run_command(password_ssh, ip_host_ssh):
-    global __number_passwords_ssh__
-    csconsole_command = "/usr/bin/cs_console"
-    enable_command = "enable"
-    null_terminal_length_command = "terminal length 0"
-    get_config_command = "show run"
-    log_buff = ""
-    log_message(2, "Module get_show_run_cs_console ..")
-    try:
-        log_message(0, "Try to connect host: " + ip_host_ssh)
-        id_conn_paramiko = paramiko.SSHClient()
-        id_conn_paramiko.load_system_host_keys()
-        id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
-
-        id_conn_paramiko.connect(ip_host_ssh, username=__username_ssh__, password=password_ssh, timeout=__timeout_ssh__)
-        chan = id_conn_paramiko.invoke_shell()
-
-        resp_ssh = ""
-        log_message(0, "Connected to host : " + ip_host_ssh)
-        while not re.search("#", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-        log_message(2, resp_ssh)
-        log_message(1, "Received command promt \'#\': OK")
-
-        chan.send(csconsole_command + "\n")
-        resp_ssh = ""
-        while not re.search(">", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            if re.search("Could not establish", resp_ssh):
-                log_message(0, "ERROR: Could not establish connection with daemon on host: " + ip_host_ssh)
-                log_message(0, "Return without cisco configuration ...  ")
-                return log_buff
-            log_message(2, resp_ssh)
-        log_message(1, "Command \'" + csconsole_command + "\'run OK")
-
-        chan.send(enable_command + "\n")
-        resp_ssh = ""
-        log_message(1, "Running command \'" + enable_command + "\' ...")
-        while not re.search("assword", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            log_message(1, resp_ssh)
-        num_list_password = len(__list_passwords_enable__)
-        log_message(1, "Num enable password: " + str(num_list_password))
-        for enable_password in __list_passwords_enable__:
-            log_message(1, "Current num enable password: " + str(num_list_password))
-            log_message(1, "Enable pass: " + enable_password)
-            chan.send(enable_password + "\n")
-            resp_ssh = ""
-            while not re.search("#", resp_ssh):
-                while not chan.recv_ready():
-                    time.sleep(0.05)
-                resp_ssh = chan.recv(9999).decode('ascii')
-                log_message(2, resp_ssh)
-                if re.search("denied", resp_ssh):
-                    log_message(1, "Enable password is incorect for host: " + ip_host_ssh)
-                    num_list_password -= 1
-                    if num_list_password == 0:
-                        log_message(1, "Return without enable ")
-                        __number_passwords_ssh__ = len(__list_passwords_ssh__)
-                        id_conn_paramiko.close()
-                        return ""
-                    else:
-                        log_message(1, "Break if")
-                        chan.send(enable_command + "\n")
-                        break
-                log_message(2, resp_ssh)
-        log_message(1, "Command \'" + enable_command + "\' run OK")
-
-        log_message(1, "Run null terminal length")
-        chan.send(null_terminal_length_command + "\n")
-        resp_ssh = ""
-        while not re.search("#", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            log_message(2, resp_ssh)
-        log_message(1, "Command \'" + null_terminal_length_command + "\' run OK")
-
-        chan.send(get_config_command + "\n")
-        resp_ssh = ""
-        while not re.search("#", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            log_buff += resp_ssh
-            log_message(2, resp_ssh)
-        log_message(1, "Command \'" + get_config_command + "\' run OK")
-        log_message(2, log_buff)
-
-    except paramiko.AuthenticationException:
-        print("Authentication problem ...")
-        if __number_passwords_ssh__ > 1:
-            print("Connecting with another password ...")
-            __number_passwords_ssh__ -= 1
-            log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
-
-    except paramiko.SSHException as sshException:
-        print("Could not establish SSH connection: %s" % sshException)
-        __number_passwords_ssh__ = len(__list_passwords_ssh__)
-    except socket.error as e:
-        print("Socket error: ", e)
-    else:
-        log_message(0, "Connected ... OK")
-        __number_passwords_ssh__ = len(__list_passwords_ssh__)
-    finally:
-        id_conn_paramiko.close()
-        return log_buff
-
-
 def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
     global __number_passwords_ssh__
-    csconsole_command = "/usr/bin/cs_console"
+    csconsole_command = "su cscons"
     enable_command = "enable"
     null_terminal_length_command = "terminal length 0"
     log_buff = ""
     log_message(2, "run_cs_console_command ..")
     try:
-        log_message(0, "Try to connect host: " + ip_host_ssh)
+        log_message(1, "Try to connect host: " + ip_host_ssh)
         id_conn_paramiko = paramiko.SSHClient()
         id_conn_paramiko.load_system_host_keys()
         id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
@@ -387,7 +271,7 @@ def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
         chan = id_conn_paramiko.invoke_shell()
 
         resp_ssh = ""
-        log_message(0, "Connected to host : " + ip_host_ssh)
+        log_message(1, "Connected to host : " + ip_host_ssh)
         while not re.search("#", resp_ssh):
             while not chan.recv_ready():
                 time.sleep(0.05)
@@ -397,7 +281,7 @@ def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
 
         chan.send(csconsole_command + "\n")
         resp_ssh = ""
-        while not re.search(">", resp_ssh):
+        while not re.search("#", resp_ssh):
             while not chan.recv_ready():
                 time.sleep(0.05)
             resp_ssh = chan.recv(9999).decode('ascii')
@@ -407,41 +291,6 @@ def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
                 return log_buff
             log_message(2, resp_ssh)
         log_message(1, "Command \'" + csconsole_command + "\'run OK")
-
-        chan.send(enable_command + "\n")
-        resp_ssh = ""
-        log_message(1, "Running command \'" + enable_command + "\' ...")
-        while not re.search("assword", resp_ssh):
-            while not chan.recv_ready():
-                time.sleep(0.05)
-            resp_ssh = chan.recv(9999).decode('ascii')
-            log_message(1, resp_ssh)
-        num_list_password = len(__list_passwords_enable__)
-        log_message(1, "Num enable password: " + str(num_list_password))
-        for enable_password in __list_passwords_enable__:
-            log_message(1, "Current num enable password: " + str(num_list_password))
-            log_message(1, "Enable pass: " + enable_password)
-            chan.send(enable_password + "\n")
-            resp_ssh = ""
-            while not re.search("#", resp_ssh):
-                while not chan.recv_ready():
-                    time.sleep(0.05)
-                resp_ssh = chan.recv(9999).decode('ascii')
-                log_message(2, resp_ssh)
-                if re.search("denied", resp_ssh):
-                    log_message(1, "Enable password is incorect for host: " + ip_host_ssh)
-                    num_list_password -= 1
-                    if num_list_password == 0:
-                        log_message(1, "Return without enable ")
-                        __number_passwords_ssh__ = len(__list_passwords_ssh__)
-                        id_conn_paramiko.close()
-                        return ""
-                    else:
-                        log_message(1, "Break if")
-                        chan.send(enable_command + "\n")
-                        break
-                log_message(2, resp_ssh)
-        log_message(1, "Command \'" + enable_command + "\' run OK")
 
         log_message(1, "Run null terminal length")
         chan.send(null_terminal_length_command + "\n")
@@ -461,22 +310,22 @@ def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
                     time.sleep(0.05)
                 resp_ssh = chan.recv(9999).decode('ascii')
                 log_buff += resp_ssh
-                log_message(0, resp_ssh)
+                log_message(1, resp_ssh)
             log_message(0, "Command \'" + run_command + "\' run OK")
         log_message(2, log_buff)
 
     except paramiko.AuthenticationException:
-        print("Authentication problem ...")
+        log_message(0, "Authentication problem with host ip: " + ip_host_ssh + " ... access denied")
         if __number_passwords_ssh__ > 1:
-            print("Connecting with another password ...")
+            log_message(0, "Connecting with another password ...")
             __number_passwords_ssh__ -= 1
-            log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
+            log_buff = csconsole_run_command(run_commands, __list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
-        print("Could not establish SSH connection: %s" % sshException)
+        log_message(0, "Could not establish SSH connection: " + str(sshException))
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
     except socket.error as e:
-        print("Socket error: ", e)
+        log_message(0, "Socket error: " + str(e))
     else:
         log_message(0, "Connected ... OK")
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
@@ -530,16 +379,16 @@ def rnd_run_command(password_ssh, ip_host_ssh):
         log_message(0, log_buff)
         id_conn_paramiko.close()
     except paramiko.AuthenticationException:
-        print("Authentication problem ...")
+        log_message(0, "Authentication problem ...")
         if __number_passwords_ssh__ > 1:
-            print("Connecting with another password ...")
+            log_message(0, "Connecting with another password ...")
             __number_passwords_ssh__ -= 1
             rnd_run_command(__list_passwords_ssh__[len(__list_passwords_ssh__) - __number_passwords_ssh__], ip_host_ssh)
 
     except paramiko.SSHException as sshException:
-        print("Could not establish SSH connection: %s" % sshException)
+        log_message(0, "Could not establish SSH connection: " + str(sshException))
     except socket.error as e:
-        print("Socket error: ", e)
+        log_message(0, "Socket error: " + str(e))
     else:
         log_message(0, "Connected ... OK")
         __number_passwords_ssh__ = len(__list_passwords_ssh__)
@@ -602,7 +451,10 @@ if __name__ == '__main__':
         for h in __dict_hosts_ssh__:
             log_message(0, "!=======================================================================")
             log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
-            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            if h['host'] == '':
+                hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            else:
+                hostname = h['host']
             ret_log_buff = cmd_run_command(listComm, __list_passwords_ssh__[0], h['ip'])
             log_message(2, "!----------------------" + h['ip'] + "(" + h['host'] + ")----------------------")
             log_message(2, ret_log_buff)
@@ -613,7 +465,10 @@ if __name__ == '__main__':
         for h in __dict_hosts_ssh__:
             log_message(0, "!=======================================================================")
             log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
-            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            if h['host'] == '':
+                hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            else:
+                hostname = h['host']
             # print("Hostname : " + hostname + "===")
             ret_log_buff = cmd_run_command(__all_config_list_command__, __list_passwords_ssh__[0], h['ip'])
             log_message(2, "!----------------------" + h['ip'] + "(" + hostname + ")----------------------")
@@ -666,9 +521,12 @@ if __name__ == '__main__':
         for h in __dict_hosts_ssh__:
             log_message(0, "!=======================================================================")
             log_message(0, '+++++++++++++++++++ {ip:s} ({host:s}) +++++++++++++++++++'.format_map(h))
-            hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            if h['host'] == '':
+                hostname = get_hostname(__list_passwords_ssh__[0], h['ip']).strip()
+            else:
+                hostname = h['host']
             log_message(1, "Host to connect : " + hostname + "---" + h['ip'])
-            ret_log_buff = show_run_csconsole_run_command(__list_passwords_ssh__[0], h['ip'])
+            ret_log_buff = csconsole_run_command(['show run'], __list_passwords_ssh__[0], h['ip'])
             log_message(2, ret_log_buff)
             if ret_log_buff:
                 write_to_file_result("csconsole", hostname, h['ip'], ret_log_buff)
