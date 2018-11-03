@@ -15,7 +15,7 @@ import sys
 import socket
 import getpass
 
-description_argument_parser = "S-Terra: Configure S-Terra, v2.0"
+description_argument_parser = "S-Terra: Configure S-Terra, v3.0"
 epilog_argument_parser = "Alexey: alexeykr@gmail.ru"
 
 __level_debug__ = int()
