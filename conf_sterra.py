@@ -34,10 +34,11 @@ __output_dir__ = ""
 __name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code', 'ip_host', 'ip_mask', 'ip_default', 'eth']
 __all_config_list_command__ = [
     'lic_mgr show',
-    'cat /opt/l2svc/etc/*.lic',
+    'cat /opt/l2svc/etc/l2.lic',
     'find /opt/l2svc/etc/ -iname "*.conf" -exec echo {} \; -exec cat {} \;',
     'cat /etc/ifaliases.cf',
-    'cat /etc/network/interfaces'
+    'cat /etc/network/interfaces',
+    'dp_mgr show'
 ]
 
 __ifaliases_file_ = [
@@ -133,7 +134,7 @@ def write_to_file_result(pre_name_file, namehost, iphost, write_messsage, flagNe
     year, month, day, hour, minute = get_date()
 
     list_names = [pre_name_file, namehost, iphost, day, month, year, hour, minute + ".txt"]
-    file_name = '-'.join(list_names)
+    file_name = '_'.join(list_names)
     id_config_file = open(__output_dir__ + file_name, 'w')
     id_config_file.write(write_messsage)
     if __flag_print_onscreen__:
@@ -474,7 +475,7 @@ if __name__ == '__main__':
             log_message(2, "!----------------------" + h['ip'] + "(" + hostname + ")----------------------")
             log_message(2, ret_log_buff)
             if ret_log_buff:
-                write_to_file_result("config", hostname, h['ip'], ret_log_buff)
+                write_to_file_result("sterra", hostname, h['ip'], ret_log_buff)
     # Run Initialization s-terra
     if arg.init:
         __init_commands__.append('\n'.join(__ifaliases_file_))

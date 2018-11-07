@@ -6,7 +6,6 @@ import argparse
 import os
 import re
 import time
-import getpass
 import multiprocessing
 from datetime import datetime
 from netmiko.ssh_exception import NetMikoTimeoutException, NetMikoAuthenticationException
@@ -25,8 +24,6 @@ listDevices = dict()
 __log_output_file__ = "log_output_cisco.txt"
 __ssh_timeout__ = 5
 __output_dir__ = "output/"
-__username__ = ""
-__password__ = ""
 listParamNetmiko = ['device_type', 'ip', 'username', 'password', 'port', 'verbose', 'secret']
 commandDefault = "sh version"
 grepRunConfig = "sh runn | "
@@ -107,8 +104,8 @@ def FileConfigAnalyze():
             continue
         listDevices[countDevices] = dict({'ip': sLine.split(';')[0].strip()})
         listDevices[countDevices]['device_type'] = "cisco_ios"
-        listDevices[countDevices]['username'] = __username__
-        listDevices[countDevices]['password'] = __password__
+        listDevices[countDevices]['username'] = "root"
+        listDevices[countDevices]['password'] = "cisco"
         listDevices[countDevices]['secret'] = "cisco"
         countDevices += 1
 
@@ -134,21 +131,26 @@ def ConnectToRouter(infoDevice, runCommand, mp_queue):
         SSH = netmiko.ConnectHandler(**netmikoInfo)
         SSH.read_channel()
         find_hostname = SSH.find_prompt()
-        hostname = re.match("^([^#>]*)[#>]", find_hostname).group(1).strip()
-        SSH.enable()
+        hostname = re.match("root@([^:]*):~#", find_hostname).group(1).strip()
+        print("Hostname : " + hostname)
+        new_prompt = hostname + "#"
+        commandReturn = SSH.send_command("su cscons", expect_string=new_prompt)
+        print("Command return: " + commandReturn)
+        commandReturn = SSH.send_command("terminal length 0", expect_string=new_prompt)
+        print("Command return: " + commandReturn)
         log_message(0, "Process pid: " + str(proc) + ' Hostname: {0}'.format(hostname) + ' IpDevice: {ip}'.format(**infoDevice))
         if flagLoad:
             # print "Name File: " + infoDevice['conf_file']
             commandReturn = SSH.send_config_from_file(infoDevice['conf_file'])
         else:
             log_message(0, "commandSend : " + str(runCommand))
-            commandReturn = SSH.send_command(runCommand)
+            commandReturn = SSH.send_command(runCommand, expect_string=new_prompt)
             log_message(1, "commandReturn : " + str(commandReturn))
     except (NetMikoTimeoutException, NetMikoAuthenticationException) as e:
         print("Cannot connect to ip : " + 'IpDevice: {ip}'.format(**infoDevice))
         print("Error: " + str(e))
         return None
-    return_data[hostname + "_" + infoDevice['ip']] = commandReturn
+    return_data['{}_{}'.format(infoDevice['ip'], hostname)] = commandReturn
     mp_queue.put(return_data)
     SSH.disconnect()
 
@@ -161,7 +163,7 @@ def main():
     max_number_processes = multiprocessing.cpu_count() - 2
     print("CPU_COUNT: " + str(max_number_processes))
 
-    print("\nStart time: " + str(datetime.now()))  
+    print("\nStart time: " + str(datetime.now()))
     for numDevice in listDevices:
         p = multiprocessing.Process(target=ConnectToRouter, args=(listDevices[numDevice], commandDefault, mp_queue))
         processes.append(p)
@@ -174,7 +176,8 @@ def main():
 
     for p in processes:
         p.join()
-    for listRes in sorted(results):
+    # print(results)
+    for listRes in results:
         for res in listRes:
             if flagPrint:
                 print("=" * 100)
@@ -183,7 +186,7 @@ def main():
             if flagSave:
                 year, month, day, hour, minute = GetDate()
                 # Create Filename
-                filebits = ["cisco", res, day, month, year, hour, minute + ".txt"]
+                filebits = [res, "config", day, month, year, hour, minute + ".txt"]
                 fileSave = '_'.join(filebits)
                 f = open(__output_dir__ + fileSave, 'w')
                 f.write(listRes[res])
@@ -191,8 +194,5 @@ def main():
     print("\nEnd time: " + str(datetime.now()))
 
 if __name__ == '__main__':
-    __username__ = input("Login: ")
-    __password__ = getpass.getpass("Password: ")
-    start_time = time.time()
+
     main()
-    print('Running time: {}'.format(time.time()-start_time))
