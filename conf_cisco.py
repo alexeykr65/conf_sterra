@@ -159,6 +159,7 @@ def main():
     mp_queue = multiprocessing.Queue()
     processes = []
     max_number_processes = multiprocessing.cpu_count() - 2
+    multiprocessing.freeze_support()
     print("CPU_COUNT: " + str(max_number_processes))
 
     print("\nStart time: " + str(datetime.now()))  

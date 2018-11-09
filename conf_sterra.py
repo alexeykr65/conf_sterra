@@ -192,7 +192,7 @@ def cmd_run_command(run_commands, password_ssh, ip_host_ssh):
     log_buff = ""
     try:
         id_conn_paramiko = paramiko.SSHClient()
-        id_conn_paramiko.load_system_host_keys()
+        #id_conn_paramiko.load_system_host_keys()
         id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
         id_conn_paramiko.connect(ip_host_ssh, username=__username_ssh__, password=password_ssh, timeout=__timeout_ssh__)
         chan = id_conn_paramiko.invoke_shell()
@@ -265,7 +265,7 @@ def csconsole_run_command(run_commands, password_ssh, ip_host_ssh):
     try:
         log_message(1, "Try to connect host: " + ip_host_ssh)
         id_conn_paramiko = paramiko.SSHClient()
-        id_conn_paramiko.load_system_host_keys()
+        # id_conn_paramiko.load_system_host_keys()
         id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
 
         id_conn_paramiko.connect(ip_host_ssh, username=__username_ssh__, password=password_ssh, timeout=__timeout_ssh__)
@@ -342,7 +342,7 @@ def rnd_run_command(password_ssh, ip_host_ssh):
     try:
         # log_message(0, "RND host: " + h[0] + " " + h[1])
         id_conn_paramiko = paramiko.SSHClient()
-        id_conn_paramiko.load_system_host_keys()
+        # id_conn_paramiko.load_system_host_keys()
         id_conn_paramiko.set_missing_host_key_policy(paramiko.WarningPolicy)
 
         id_conn_paramiko.connect(ip_host_ssh, username=__username_ssh__, password=password_ssh, timeout=__timeout_ssh__)
@@ -485,15 +485,16 @@ if __name__ == '__main__':
         __init_commands__.append(__vpndrv_start_services_sterra__)
         __init_commands__.append(__vpnlog_start_services_sterra__)
         __init_commands__.append(__vpngate_start_services_sterra__)
+        __init_commands__.append('rm /etc/rc.local.inc ')
         __init_commands__.append('')
 
         log_message(2, __init_commands__)
         for h in __dict_hosts_ssh__:
-            if (len(h) - 1) >= 6:
-                print("length dict: " + str(len(h)))
-                __init_commands__[len(__init_commands__) - 1] = __init_config_network_interfaces__
-                __init_commands__[len(__init_commands__) - 1] += 'auto {eth:s} \niface {eth:s} inet static\nmtu 1500\n'.format_map(h)
-                __init_commands__[len(__init_commands__) - 1] += 'address {ip_host:s}\nnetmask {ip_mask:s}\n###netifcfg-end###\nEOF\n'.format_map(h)
+            # if (len(h) - 1) >= 6:
+            #     print("length dict: " + str(len(h)))
+            #     __init_commands__[len(__init_commands__) - 1] = __init_config_network_interfaces__
+            #     __init_commands__[len(__init_commands__) - 1] += 'auto {eth:s} \niface {eth:s} inet static\nmtu 1500\n'.format_map(h)
+            #     __init_commands__[len(__init_commands__) - 1] += 'address {ip_host:s}\nnetmask {ip_mask:s}\n###netifcfg-end###\nEOF\n'.format_map(h)
 
             # print(__init_commands__)
             ret_log_buff = ""
