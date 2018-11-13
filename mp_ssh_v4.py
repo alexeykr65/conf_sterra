@@ -23,7 +23,7 @@ description_argument_parser = "S-Terra: Configure S-Terra, v3.0"
 epilog_argument_parser = "Alexey: alexeykr@gmail.ru"
 
 __level_debug__ = int()
-
+__file_postfix__ = ""
 __timeout_ssh__ = 10
 __name_list_dict__ = ['ip', 'host', 'product', 'customer', 'lic_num', 'lic_code', 'ip_host', 'ip_mask', 'ip_default', 'eth']
 
@@ -92,7 +92,7 @@ def get_date():
 def write_to_file_result(pre_name_file, namehost, iphost, write_messsage, flagNewFile=True):
     year, month, day, hour, minute = get_date()
     output_dir = "./output/"
-    list_names = [pre_name_file, namehost, iphost, day, month, year, hour, minute + ".txt"]
+    list_names = [pre_name_file, namehost, iphost, __file_postfix__]
     file_name = '_'.join(list_names)
     id_config_file = open(output_dir + file_name, 'w')
     id_config_file.write(write_messsage)
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     year, month, day, hour, minute = get_date()
     list_names = ["log_output", day, month, year, hour, minute + ".txt"]
     __log_output_file__ = '-'.join(list_names)
-
+    __file_postfix__ = '_'.join([day, month, year, hour, minute + ".txt"])
     # Disable warning from python
     if not sys.warnoptions:
         import warnings

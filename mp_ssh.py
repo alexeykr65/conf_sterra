@@ -19,7 +19,7 @@ import multiprocessing as mp
 import netmiko as nm
 from functools import partial
 
-description_argument_parser = "S-Terra: Configure S-Terra, v3.0"
+description_argument_parser = "S-Terra: Get configuration from Cisco and S-Terra, v5.0"
 epilog_argument_parser = "Alexey: alexeykr@gmail.ru"
 
 __level_debug__ = int()
