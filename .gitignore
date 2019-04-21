@@ -1,5 +1,2 @@
-*.txt
-*.conf
-win
-output
-
+*
+!mp_ssh.py
